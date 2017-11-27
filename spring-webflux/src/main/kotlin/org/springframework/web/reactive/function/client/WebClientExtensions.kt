@@ -18,19 +18,20 @@ package org.springframework.web.reactive.function.client
 
 import org.reactivestreams.Publisher
 import org.springframework.core.ParameterizedTypeReference
+import org.springframework.web.reactive.function.client.WebClient.RequestBodySpec
+import org.springframework.web.reactive.function.client.WebClient.RequestHeadersSpec
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
-
 /**
- * Extension for [WebClient.RequestBodySpec.body] providing a `body<Foo>() variant
+ * Extension for [WebClient.RequestBodySpec.body] providing a `body<Foo>()` variant
  * leveraging Kotlin reified type parameters.
  *
  * @author Sebastien Deleuze
  * @since 5.0
  */
 @Suppress("EXTENSION_SHADOWED_BY_MEMBER")
-inline fun <reified T : Any, S : Publisher<T>> WebClient.RequestBodySpec.body(publisher: S): WebClient.RequestHeadersSpec<*> =
+inline fun <reified T : Any, S : Publisher<T>> RequestBodySpec.body(publisher: S): RequestHeadersSpec<*> =
 		body(publisher, object : ParameterizedTypeReference<T>() {})
 
 /**

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.http.codec.json;
 
 import java.io.IOException;
@@ -54,7 +55,6 @@ import org.springframework.util.MimeType;
  */
 public abstract class AbstractJackson2Decoder extends Jackson2CodecSupport implements HttpMessageDecoder<Object> {
 
-
 	/**
 	 * Constructor with a Jackson {@link ObjectMapper} to use.
 	 */
@@ -65,10 +65,10 @@ public abstract class AbstractJackson2Decoder extends Jackson2CodecSupport imple
 
 	@Override
 	public boolean canDecode(ResolvableType elementType, @Nullable MimeType mimeType) {
-		JavaType javaType = objectMapper().getTypeFactory().constructType(elementType.getType());
+		JavaType javaType = getObjectMapper().getTypeFactory().constructType(elementType.getType());
 		// Skip String: CharSequenceDecoder + "*/*" comes after
 		return (!CharSequence.class.isAssignableFrom(elementType.resolve(Object.class)) &&
-				objectMapper().canDeserialize(javaType) && supportsMimeType(mimeType));
+				getObjectMapper().canDeserialize(javaType) && supportsMimeType(mimeType));
 	}
 
 	@Override
@@ -89,7 +89,7 @@ public abstract class AbstractJackson2Decoder extends Jackson2CodecSupport imple
 
 	private Flux<TokenBuffer> tokenize(Publisher<DataBuffer> input, boolean tokenizeArrayElements) {
 		try {
-			JsonFactory factory = objectMapper().getFactory();
+			JsonFactory factory = getObjectMapper().getFactory();
 			JsonParser parser = factory.createNonBlockingByteArrayParser();
 			Jackson2Tokenizer tokenizer = new Jackson2Tokenizer(parser, tokenizeArrayElements);
 			return Flux.from(input).flatMap(tokenizer).doFinally(t -> tokenizer.endOfInput());
@@ -111,12 +111,12 @@ public abstract class AbstractJackson2Decoder extends Jackson2CodecSupport imple
 		Class<?> jsonView = (hints != null ? (Class<?>) hints.get(Jackson2CodecSupport.JSON_VIEW_HINT) : null);
 
 		ObjectReader reader = (jsonView != null ?
-				objectMapper().readerWithView(jsonView).forType(javaType) :
-				objectMapper().readerFor(javaType));
+				getObjectMapper().readerWithView(jsonView).forType(javaType) :
+				getObjectMapper().readerFor(javaType));
 
 		return tokens.map(tokenBuffer -> {
 			try {
-				return reader.readValue(tokenBuffer.asParser());
+				return reader.readValue(tokenBuffer.asParser(getObjectMapper()));
 			}
 			catch (InvalidDefinitionException ex) {
 				throw new CodecException("Type definition error: " + ex.getType(), ex);
@@ -144,4 +144,5 @@ public abstract class AbstractJackson2Decoder extends Jackson2CodecSupport imple
 	protected <A extends Annotation> A getAnnotation(MethodParameter parameter, Class<A> annotType) {
 		return parameter.getParameterAnnotation(annotType);
 	}
+
 }

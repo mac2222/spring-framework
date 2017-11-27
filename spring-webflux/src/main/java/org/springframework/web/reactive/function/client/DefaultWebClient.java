@@ -142,7 +142,7 @@ class DefaultWebClient implements WebClient {
 
 	@Override
 	public Builder mutate() {
-		return this.builder;
+		return new DefaultWebClientBuilder(this.builder);
 	}
 
 
@@ -270,10 +270,9 @@ class DefaultWebClient implements WebClient {
 		}
 
 		@Override
-		public DefaultRequestBodyUriSpec cookies(
-				Consumer<MultiValueMap<String, String>> cookiesConsumer) {
+		public DefaultRequestBodyUriSpec cookies(Consumer<MultiValueMap<String, String>> cookiesConsumer) {
 			Assert.notNull(cookiesConsumer, "'cookiesConsumer' must not be null");
-			cookiesConsumer.accept(this.cookies);
+			cookiesConsumer.accept(getCookies());
 			return this;
 		}
 
@@ -298,7 +297,9 @@ class DefaultWebClient implements WebClient {
 		}
 
 		@Override
-		public <T, P extends Publisher<T>> RequestHeadersSpec<?> body(P publisher, ParameterizedTypeReference<T> typeReference) {
+		public <T, P extends Publisher<T>> RequestHeadersSpec<?> body(P publisher,
+				ParameterizedTypeReference<T> typeReference) {
+
 			this.inserter = BodyInserters.fromPublisher(publisher, typeReference);
 			return this;
 		}
@@ -334,14 +335,11 @@ class DefaultWebClient implements WebClient {
 		}
 
 		private HttpHeaders initHeaders() {
-			if (CollectionUtils.isEmpty(defaultHeaders) && CollectionUtils.isEmpty(this.headers)) {
-				return new HttpHeaders();
+			if (CollectionUtils.isEmpty(this.headers)) {
+				return (defaultHeaders != null ? defaultHeaders : new HttpHeaders());
 			}
 			else if (CollectionUtils.isEmpty(defaultHeaders)) {
 				return this.headers;
-			}
-			else if (CollectionUtils.isEmpty(this.headers)) {
-				return defaultHeaders;
 			}
 			else {
 				HttpHeaders result = new HttpHeaders();
@@ -356,14 +354,11 @@ class DefaultWebClient implements WebClient {
 		}
 
 		private MultiValueMap<String, String> initCookies() {
-			if (CollectionUtils.isEmpty(defaultCookies) && CollectionUtils.isEmpty(this.cookies)) {
-				return new LinkedMultiValueMap<>(0);
+			if (CollectionUtils.isEmpty(this.cookies)) {
+				return (defaultCookies != null ? defaultCookies : new LinkedMultiValueMap<>(0));
 			}
 			else if (CollectionUtils.isEmpty(defaultCookies)) {
 				return this.cookies;
-			}
-			else if (CollectionUtils.isEmpty(this.cookies)) {
-				return defaultCookies;
 			}
 			else {
 				MultiValueMap<String, String> result = new LinkedMultiValueMap<>();
@@ -379,9 +374,11 @@ class DefaultWebClient implements WebClient {
 		}
 	}
 
+
 	private static class DefaultResponseSpec implements ResponseSpec {
 
-		private static final StatusHandler DEFAULT_STATUS_HANDLER = new StatusHandler(HttpStatus::isError, DefaultResponseSpec::createResponseException);
+		private static final StatusHandler DEFAULT_STATUS_HANDLER =
+				new StatusHandler(HttpStatus::isError, DefaultResponseSpec::createResponseException);
 
 		private final Mono<ClientResponse> responseMono;
 
@@ -422,14 +419,14 @@ class DefaultWebClient implements WebClient {
 		public <T> Mono<T> bodyToMono(ParameterizedTypeReference<T> typeReference) {
 			return this.responseMono.flatMap(
 					response -> bodyToPublisher(response, BodyExtractors.toMono(typeReference),
-							mono -> (Mono<T>)mono));
+							this::monoThrowableToMono));
 		}
 
 		private <T> Mono<T> monoThrowableToMono(Mono<? extends Throwable> mono) {
 			return mono.flatMap(Mono::error);
 		}
 
- 		@Override
+		@Override
 		public <T> Flux<T> bodyToFlux(Class<T> elementType) {
 			return this.responseMono.flatMapMany(
 					response -> bodyToPublisher(response, BodyExtractors.toFlux(elementType),
@@ -469,6 +466,7 @@ class DefaultWebClient implements WebClient {
 						DataBufferUtils.release(dataBuffer);
 						return bytes;
 					})
+					.defaultIfEmpty(new byte[0])
 					.map(bodyBytes -> {
 						String msg = String.format("ClientResponse has erroneous status code: %d %s", response.statusCode().value(),
 								response.statusCode().getReasonPhrase());
