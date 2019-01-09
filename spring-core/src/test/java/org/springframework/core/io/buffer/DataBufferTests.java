@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import org.junit.Test;
@@ -151,6 +152,70 @@ public class DataBufferTests extends AbstractDataBufferAllocatingTestCase {
 	}
 
 	@Test
+	public void writeNullString() {
+		DataBuffer buffer = createDataBuffer(1);
+		try {
+			buffer.write(null, StandardCharsets.UTF_8);
+			fail("IllegalArgumentException expected");
+		}
+		catch (IllegalArgumentException exc) {
+		}
+		finally {
+			release(buffer);
+		}
+	}
+
+	@Test
+	public void writeNullCharset() {
+		DataBuffer buffer = createDataBuffer(1);
+		try {
+			buffer.write("test", null);
+			fail("IllegalArgumentException expected");
+		}
+		catch (IllegalArgumentException exc) {
+		}
+		finally {
+			release(buffer);
+		}
+	}
+
+	@Test
+	public void writeUtf8String() {
+		DataBuffer buffer = createDataBuffer(6);
+		buffer.write("Spring", StandardCharsets.UTF_8);
+
+		byte[] result = new byte[6];
+		buffer.read(result);
+
+		assertArrayEquals("Spring".getBytes(StandardCharsets.UTF_8), result);
+		release(buffer);
+	}
+
+	@Test
+	public void writeUtf8StringOutGrowsCapacity() {
+		DataBuffer buffer = createDataBuffer(5);
+		buffer.write("Spring €", StandardCharsets.UTF_8);
+
+		byte[] result = new byte[10];
+		buffer.read(result);
+
+		assertArrayEquals("Spring €".getBytes(StandardCharsets.UTF_8), result);
+		release(buffer);
+	}
+
+	@Test
+	public void writeIsoString() {
+		DataBuffer buffer = createDataBuffer(3);
+		buffer.write("\u00A3", StandardCharsets.ISO_8859_1);
+
+		byte[] result = new byte[1];
+		buffer.read(result);
+
+		assertArrayEquals("\u00A3".getBytes(StandardCharsets.ISO_8859_1), result);
+		release(buffer);
+	}
+
+	@Test
 	public void inputStream() throws IOException {
 		DataBuffer buffer = createDataBuffer(4);
 		buffer.write(new byte[]{'a', 'b', 'c', 'd', 'e'});
@@ -180,6 +245,27 @@ public class DataBufferTests extends AbstractDataBufferAllocatingTestCase {
 		assertEquals(-1, inputStream.read(bytes));
 
 		release(buffer);
+	}
+
+	@Test
+	public void inputStreamReleaseOnClose() throws IOException {
+		DataBuffer buffer = createDataBuffer(3);
+		byte[] bytes = {'a', 'b', 'c'};
+		buffer.write(bytes);
+
+		InputStream inputStream = buffer.asInputStream(true);
+
+		try {
+			byte[] result = new byte[3];
+			int len = inputStream.read(result);
+			assertEquals(3, len);
+			assertArrayEquals(bytes, result);
+		} finally {
+			inputStream.close();
+		}
+
+		// AbstractDataBufferAllocatingTestCase.LeakDetector will verify the buffer's release
+
 	}
 
 	@Test
@@ -303,7 +389,7 @@ public class DataBufferTests extends AbstractDataBufferAllocatingTestCase {
 
 		assertArrayEquals(new byte[]{'a', 'b', 'c', 'd'}, result);
 
-		release(buffer1);
+		release(buffer1, buffer2, buffer3);
 	}
 
 	@Test
@@ -461,5 +547,59 @@ public class DataBufferTests extends AbstractDataBufferAllocatingTestCase {
 		release(buffer);
 	}
 
+	@Test
+	public void spr16351() {
+		DataBuffer buffer = createDataBuffer(6);
+		byte[] bytes = {'a', 'b', 'c', 'd', 'e', 'f'};
+		buffer.write(bytes);
+		DataBuffer slice = buffer.slice(3, 3);
+		buffer.writePosition(3);
+		buffer.write(slice);
+
+		assertEquals(6, buffer.readableByteCount());
+		byte[] result = new byte[6];
+		buffer.read(result);
+
+		assertArrayEquals(bytes, result);
+
+		release(buffer);
+	}
+
+	@Test
+	public void join() {
+		DataBuffer composite = this.bufferFactory.join(Arrays.asList(stringBuffer("a"),
+				stringBuffer("b"), stringBuffer("c")));
+		assertEquals(3, composite.readableByteCount());
+		byte[] bytes = new byte[3];
+		composite.read(bytes);
+
+		assertArrayEquals(new byte[] {'a','b','c'}, bytes);
+
+		release(composite);
+	}
+
+	@Test
+	public void getByte() {
+		DataBuffer buffer = stringBuffer("abc");
+
+		assertEquals('a', buffer.getByte(0));
+		assertEquals('b', buffer.getByte(1));
+		assertEquals('c', buffer.getByte(2));
+		try {
+			buffer.getByte(-1);
+			fail("IndexOutOfBoundsException expected");
+		}
+		catch (IndexOutOfBoundsException ignored) {
+		}
+
+		try {
+			buffer.getByte(3);
+			fail("IndexOutOfBoundsException expected");
+		}
+		catch (IndexOutOfBoundsException ignored) {
+		}
+
+		release(buffer);
+	}
 
 }
